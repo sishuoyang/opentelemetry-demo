@@ -21,6 +21,12 @@ function random(arr) {
   return arr[index];
 }
 
+// Gold-tier rewards members must pass step-up verification with a valid loyalty
+// token before a charge is authorized. Non-gold tiers are exempt.
+function isLoyaltyTokenValid(token) {
+  return typeof token === 'string' && token.length > 0;
+}
+
 module.exports.charge = async request => {
   const span = tracer.startSpan('charge');
 
@@ -33,17 +39,6 @@ module.exports.charge = async request => {
     }
 
     await OpenFeature.setProviderAndWait(flagProvider);
-
-    const numberVariant = await OpenFeature.getClient().getNumberValue("paymentFailure", 0);
-
-    if (numberVariant > 0) {
-      // n% chance to fail with demo.user_context.loyalty_level=gold
-      if (Math.random() < numberVariant) {
-        span.setAttributes({'demo.user_context.loyalty_level': 'gold' });
-
-        throw new Error('Payment request failed. Invalid token. demo.user_context.loyalty_level=gold');
-      }
-    }
 
     const {
       creditCardNumber: number,
@@ -76,6 +71,17 @@ module.exports.charge = async request => {
 
     if ((currentYear * 12 + currentMonth) > (year * 12 + month)) {
       throw new Error(`The credit card (ending ${lastFourDigits}) expired on ${month}/${year}.`);
+    }
+
+    // Step-up loyalty verification for gold-tier rewards members. Gated by the
+    // loyaltyTierVerification flag while we roll it out to partner banks.
+    const loyaltyVerificationEnabled =
+      await OpenFeature.getClient().getBooleanValue('loyaltyTierVerification', false);
+    if (loyaltyVerificationEnabled && loyalty_level === 'gold') {
+      const loyaltyToken = request.loyaltyToken;
+      if (!isLoyaltyTokenValid(loyaltyToken)) {
+        throw new Error('Payment request failed. Invalid token. demo.user_context.loyalty_level=gold');
+      }
     }
 
     // Do not charge synthetic requests.
