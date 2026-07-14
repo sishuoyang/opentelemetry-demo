@@ -156,6 +156,15 @@
         "off": 0
       },
       "defaultVariant": "off"
+    },
+    "loyaltyTierVerification": {
+      "description": "Require step-up loyalty-token verification for gold-tier charges",
+      "state": "ENABLED",
+      "variants": {
+        "on": true,
+        "off": false
+      },
+      "defaultVariant": "off"
     }
   }
 }
